@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>서울명성 발주</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans KR", "Malgun Gothic", Arial, sans-serif;
+      background: #f5f5f5;
+      color: #222;
+    }
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .header {
+      background: #24513d;
+      color: #fff;
+      padding: 24px 18px;
+      border-radius: 16px;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    .header p {
+      margin: 8px 0 0;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    .box {
+      background: #fff;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    label {
+      font-weight: 800;
+      display: block;
+      margin-bottom: 7px;
+      font-size: 15px;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      font-size: 16px;
+      margin-bottom: 12px;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 150px;
+    }
+    .store-fixed {
+      padding: 14px;
+      background: #fafafa;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      font-size: 17px;
+      font-weight: 800;
+    }
+    .item {
+      display: grid;
+      grid-template-columns: 1fr 95px;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .item:last-child { border-bottom: none; }
+    .item-name {
+      font-size: 15px;
+      line-height: 1.4;
+      font-weight: 700;
+    }
+    .unit {
+      font-size: 13px;
+      color: #777;
+      margin-top: 3px;
+    }
+    .qty-box {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .qty-box input {
+      margin: 0;
+      text-align: center;
+      padding: 10px 5px;
+    }
+    .unit-label {
+      font-size: 14px;
+      font-weight: 800;
+      color: #24513d;
+      min-width: 28px;
+    }
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    button {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 14px;
+      background: #24513d;
+      color: #fff;
+      font-size: 17px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .copy-btn { background: #333; }
+    .reset-btn { background: #777; }
+    .save-btn { background: #111; }
+    #preview {
+      white-space: pre-line;
+      background: #fafafa;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 15px;
+      font-size: 15px;
+      line-height: 1.7;
+      min-height: 160px;
+    }
+    .notice {
+      text-align: center;
+      color: #777;
+      font-size: 13px;
+      margin-top: 12px;
+    }
+    @media (max-width: 480px) {
+      .wrap { padding: 12px; }
+      .header h1 { font-size: 24px; }
+      .item { grid-template-columns: 1fr 88px; }
+      .btn-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>서울명성 발주</h1>
+      <p>품목은 가나다순으로 정렬되어 있습니다.</p>
+    </div>
+
+    <div class="box">
+      <label>매장명</label>
+      <div class="store-fixed">한국의집 롯데월드점</div>
+    </div>
+
+    <div class="box">
+      <label for="searchInput">품목 검색</label>
+      <input type="text" id="searchInput" placeholder="예: 오이, 고추, 김치, 커피" oninput="renderProducts()" />
+    </div>
+
+    <div class="box" id="orderList"></div>
+
+    <div class="box">
+      <label for="orderDate">발주일</label>
+      <input type="date" id="orderDate" />
+
+      <label for="memo">비고</label>
+      <textarea id="memo" placeholder="요청사항이 있으면 입력해 주세요."></textarea>
+    </div>
+
+    <div class="box">
+      <label>발주문 미리보기</label>
+      <div id="preview">발주문 생성 버튼을 누르면 여기에 발주 내용이 표시됩니다.</div>
+
+      <div class="btn-row">
+        <button onclick="createOrderText()">발주문 생성</button>
+        <button class="copy-btn" onclick="copyOrderText()">발주문 복사</button>
+      </div>
+
+      <div class="btn-row">
+        <button class="reset-btn" onclick="resetOrder()">발주문 초기화</button>
+        <button class="save-btn" onclick="submitOrder()">시트저장 + 문자전송</button>
+      </div>
+    </div>
+
+    <div class="notice">
+      발주 수량이 없는 품목은 자동으로 제외됩니다.
+    </div>
+  </div>
+
+  <script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxQ-_g3_vX1gMxzTZOLp4WxTt2zGZzVehYUSVztPTOiXuRNLGRBmYxe2XyCYK20eqDR/exec";
+    const STORE_NAME = "한국의집 롯데월드점";
+
+    const products = [
+      { name: "가스점화기", unit: "EA" },
+      { name: "가지", unit: "BOX" },
+      { name: "건새우", unit: "EA" },
+      { name: "건표고홀버섯(홀)", unit: "EA" },
+      { name: "검은깨 (1kg)", unit: "EA" },
+      { name: "고사리", unit: "BOX" },
+      { name: "고사리(1kg)", unit: "EA" },
+      { name: "고운 고춧가루 (1kg)", unit: "EA" },
+      { name: "국산 건대추", unit: "EA" },
+      { name: "궁중팬 (24cm)", unit: "EA" },
+      { name: "궁중팬 (26cm)", unit: "EA" },
+      { name: "궁중팬 (28cm)", unit: "EA" },
+      { name: "궁중팬 (30cm)", unit: "EA" },
+      { name: "근대", unit: "BOX" },
+      { name: "굵은 고춧가루 (1kg)", unit: "EA" },
+      { name: "깐대파", unit: "단" },
+      { name: "깐마늘", unit: "g" },
+      { name: "나박김치", unit: "BOX" },
+      { name: "냉면육수", unit: "BOX" },
+      { name: "논슬립", unit: "EA" },
+      { name: "다진생강(500g)", unit: "EA" },
+      { name: "단호박(통)", unit: "EA" },
+      { name: "도라지", unit: "BOX" },
+      { name: "돌나물", unit: "BOX" },
+      { name: "동부묵 (20kg)", unit: "BOX" },
+      { name: "동치미", unit: "BOX" },
+      { name: "들깨가루 (1kg)", unit: "EA" },
+      { name: "마미팜", unit: "" },
+      { name: "맥심 커피믹스(모카골드 12g*100T)", unit: "EA" },
+      { name: "면사랑 함흥냉면", unit: "EA" },
+      { name: "목장갑(10개입)", unit: "EA" },
+      { name: "무 (20kg)", unit: "BOX" },
+      { name: "미화합동된장", unit: "BOX" },
+      { name: "방풍", unit: "BOX" },
+      { name: "밥보자기 (특대)", unit: "EA" },
+      { name: "베이킹소다", unit: "EA" },
+      { name: "배", unit: "EA" },
+      { name: "배추", unit: "망" },
+      { name: "백오이", unit: "BOX" },
+      { name: "볶음참깨(1kg)", unit: "EA" },
+      { name: "볶음콩가루 (1kg)", unit: "EA" },
+      { name: "부추", unit: "단" },
+      { name: "비름", unit: "BOX" },
+      { name: "비트", unit: "EA" },
+      { name: "새송이", unit: "PK" },
+      { name: "새우젓", unit: "EA" },
+      { name: "세발나물", unit: "BOX" },
+      { name: "세척당근(10kg)", unit: "BOX" },
+      { name: "숙주", unit: "BOX" },
+      { name: "시금치", unit: "BOX" },
+      { name: "쥬키니(10kg)", unit: "BOX" },
+      { name: "양념더덕", unit: "EA" },
+      { name: "양배추", unit: "망" },
+      { name: "양상추", unit: "BOX" },
+      { name: "양파", unit: "kg" },
+      { name: "어린잎 500g", unit: "EA" },
+      { name: "얼갈이", unit: "BOX" },
+      { name: "영양부추", unit: "단" },
+      { name: "오븐장갑", unit: "EA" },
+      { name: "오이고추", unit: "g" },
+      { name: "유채", unit: "BOX" },
+      { name: "이금기 노두유", unit: "EA" },
+      { name: "장어", unit: "BOX" },
+      { name: "잡화꿀(2.4kg)", unit: "EA" },
+      { name: "적근대(2kg)", unit: "BOX" },
+      { name: "적채", unit: "EA" },
+      { name: "전복", unit: "곽" },
+      { name: "절단 맛김치", unit: "BOX" },
+      { name: "정제필터", unit: "EA" },
+      { name: "조미김", unit: "BOX" },
+      { name: "찹쌀(10kg)", unit: "EA" },
+      { name: "찹쌀가루", unit: "EA" },
+      { name: "참기름", unit: "EA" },
+      { name: "참나물", unit: "BOX" },
+      { name: "청경채", unit: "BOX" },
+      { name: "청양고추", unit: "g" },
+      { name: "청오이", unit: "EA" },
+      { name: "취나물", unit: "BOX" },
+      { name: "치커리(2kg)", unit: "BOX" },
+      { name: "카누 커피(마일드0.9g*100T)", unit: "EA" },
+      { name: "캡사이신", unit: "EA" },
+      { name: "콩나물", unit: "BOX" },
+      { name: "토란대 (1kg)", unit: "EA" },
+      { name: "토치", unit: "EA" },
+      { name: "판두부", unit: "PK" },
+      { name: "팬더 굴소스", unit: "PK" },
+      { name: "팽이", unit: "BOX" },
+      { name: "햇반", unit: "BOX" },
+      { name: "홍고추", unit: "g" },
+      { name: "흑임자가루 (1kg)", unit: "EA" },
+      { name: "흑후추가루 (200g)", unit: "EA" }
+    ];
+
+    const orderList = document.getElementById("orderList");
+
+    function setTodayDate() {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, "0");
+      const dd = String(today.getDate()).padStart(2, "0");
+      document.getElementById("orderDate").value = `${yyyy}-${mm}-${dd}`;
+    }
+
+    function renderProducts() {
+      const keyword = document.getElementById("searchInput").value.trim();
+      orderList.innerHTML = "";
+
+      const filtered = products.filter(item =>
+        item.name.includes(keyword)
+      );
+
+      filtered.forEach((item) => {
+        const originalIndex = products.findIndex(p => p.name === item.name && p.unit === item.unit);
+
+        const div = document.createElement("div");
+        div.className = "item";
+
+        div.innerHTML = `
+          <div>
+            <div class="item-name">${item.name}</div>
+            <div class="unit">단위: ${item.unit}</div>
+          </div>
+          <div class="qty-box">
+            <input type="number" id="qty-${originalIndex}" min="0" step="0.1" placeholder="0">
+            <span class="unit-label">${item.unit}</span>
+          </div>
+        `;
+
+        orderList.appendChild(div);
+      });
+    }
+
+    function getOrderItems() {
+      const orderItems = [];
+
+      products.forEach((item, index) => {
+        const input = document.getElementById(`qty-${index}`);
+        if (!input) return;
+
+        const qty = input.value;
+
+        if (qty && Number(qty) > 0) {
+          orderItems.push({
+            productName: item.name,
+            quantity: qty,
+            unit: item.unit
+          });
+        }
+      });
+
+      return orderItems;
+    }
+
+    function createOrderText() {
+      const orderDate = document.getElementById("orderDate").value;
+      const memo = document.getElementById("memo").value.trim();
+      const orderItems = getOrderItems();
+
+      if (!orderDate) {
+        alert("발주일을 선택해 주세요.");
+        return "";
+      }
+
+      if (orderItems.length === 0) {
+        alert("발주 수량을 하나 이상 입력해 주세요.");
+        return "";
+      }
+
+      let text = "";
+      text += "[서울명성 발주]\n";
+      text += `매장명: ${STORE_NAME}\n`;
+      text += `발주일: ${orderDate}\n\n`;
+      text += "■ 발주 내역\n";
+
+      orderItems.forEach((item, i) => {
+        text += `${i + 1}. ${item.productName} - ${item.quantity}${item.unit}\n`;
+      });
+
+      if (memo) {
+        text += `\n■ 비고\n${memo}\n`;
+      }
+
+      document.getElementById("preview").innerText = text;
+      return text;
+    }
+
+    function copyOrderText() {
+      const text = createOrderText();
+      if (!text) return;
+
+      navigator.clipboard.writeText(text)
+        .then(() => alert("발주문이 복사되었습니다."))
+        .catch(() => alert("복사가 안 될 경우, 미리보기 내용을 직접 복사해 주세요."));
+    }
+
+    function resetOrder() {
+      products.forEach((item, index) => {
+        const input = document.getElementById(`qty-${index}`);
+        if (input) input.value = "";
+      });
+
+      document.getElementById("memo").value = "";
+      document.getElementById("searchInput").value = "";
+      document.getElementById("preview").innerText =
+        "발주문 생성 버튼을 누르면 여기에 발주 내용이 표시됩니다.";
+
+      setTodayDate();
+      renderProducts();
+
+      alert("발주문이 초기화되었습니다.");
+    }
+
+    function submitOrder() {
+      const orderDate = document.getElementById("orderDate").value;
+      const memo = document.getElementById("memo").value.trim();
+      const orderItems = getOrderItems();
+
+      if (!orderDate) {
+        alert("발주일을 선택해 주세요.");
+        return;
+      }
+
+      if (orderItems.length === 0) {
+        alert("발주 수량을 하나 이상 입력해 주세요.");
+        return;
+      }
+
+      const orderText = createOrderText();
+
+      const orderData = {
+        vendor: "서울명성",
+        title: "서울명성 발주",
+        storeName: STORE_NAME,
+        orderDate,
+        memo,
+        orderText,
+        smsRequested: true,
+        items: orderItems
+      };
+
+      fetch(SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(orderData)
+      });
+
+      alert("시트 저장 및 문자전송 요청이 완료되었습니다.");
+      resetOrder();
+    }
+
+    setTodayDate();
+    renderProducts();
+  </script>
+</body>
+</html>
