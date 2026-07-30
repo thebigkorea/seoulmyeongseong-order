@@ -122,6 +122,21 @@
     .copy-btn { background: #333; }
     .reset-btn { background: #777; }
     .save-btn { background: #111; }
+    .draft-btn {
+  background: #d99a20;
+  color: #fff;
+}
+
+.draft-status {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #ead39a;
+  border-radius: 10px;
+  background: #fff8e8;
+  color: #705000;
+  font-size: 13px;
+  line-height: 1.5;
+}
     #preview {
       white-space: pre-line;
       background: #fafafa;
@@ -184,9 +199,32 @@
       </div>
 
       <div class="btn-row">
-        <button class="reset-btn" onclick="resetOrder()">발주문 초기화</button>
-        <button class="save-btn" onclick="submitOrder()">시트저장 + 문자전송</button>
-      </div>
+  <button
+    class="draft-btn"
+    onclick="saveDraft(false)">
+    임시저장
+  </button>
+
+  <button
+    class="save-btn"
+    onclick="submitOrder()">
+    최종 시트저장
+  </button>
+</div>
+
+<div class="btn-row">
+  <button
+    class="reset-btn"
+    onclick="resetOrder()">
+    발주문 초기화
+  </button>
+</div>
+
+<div
+  id="draftStatus"
+  class="draft-status">
+  임시저장 내역 확인 중...
+</div>
     </div>
 
     <div class="notice">
@@ -294,6 +332,8 @@
 
     const orderList = document.getElementById("orderList");
 
+    let quantityState = {};
+
     function setTodayDate() {
       const today = new Date();
       const yyyy = today.getFullYear();
@@ -302,55 +342,431 @@
       document.getElementById("orderDate").value = `${yyyy}-${mm}-${dd}`;
     }
 
-    function renderProducts() {
-      const keyword = document.getElementById("searchInput").value.trim();
-      orderList.innerHTML = "";
+    function renderProducts(saveCurrent = true) {
 
-      const filtered = products.filter(item =>
-        item.name.includes(keyword)
+  if (saveCurrent) {
+    saveVisibleQuantities();
+  }
+
+  const keyword =
+    document
+      .getElementById("searchInput")
+      .value
+      .trim();
+
+  orderList.innerHTML = "";
+
+  const filtered =
+    products.filter(item =>
+      item.name.includes(keyword)
+    );
+
+  filtered.forEach((item) => {
+
+    const originalIndex =
+      products.findIndex(
+        product =>
+          product.name === item.name &&
+          product.unit === item.unit
       );
 
-      filtered.forEach((item) => {
-        const originalIndex = products.findIndex(p => p.name === item.name && p.unit === item.unit);
+    const div =
+      document.createElement("div");
 
-        const div = document.createElement("div");
-        div.className = "item";
+    div.className = "item";
 
-        div.innerHTML = `
-          <div>
-            <div class="item-name">${item.name}</div>
-            <div class="unit">단위: ${item.unit}</div>
-          </div>
-          <div class="qty-box">
-            <input type="number" id="qty-${originalIndex}" min="0" step="0.1" placeholder="0">
-            <span class="unit-label">${item.unit}</span>
-          </div>
-        `;
+    const savedQuantity =
+      quantityState[originalIndex] || "";
 
-        orderList.appendChild(div);
-      });
+    div.innerHTML = `
+      <div>
+        <div class="item-name">
+          ${item.name}
+        </div>
+
+        <div class="unit">
+          단위: ${item.unit}
+        </div>
+      </div>
+
+      <div class="qty-box">
+
+        <input
+          type="number"
+          id="qty-${originalIndex}"
+          min="0"
+          step="0.1"
+          placeholder="0"
+          value="${savedQuantity}"
+          data-index="${originalIndex}"
+        >
+
+        <span class="unit-label">
+          ${item.unit}
+        </span>
+
+      </div>
+    `;
+
+    orderList.appendChild(div);
+
+    const input =
+      div.querySelector(
+        `#qty-${originalIndex}`
+      );
+
+    if (input) {
+
+      input.addEventListener(
+        "input",
+        function() {
+
+          quantityState[originalIndex] =
+            input.value;
+
+          scheduleDraftSave();
+        }
+      );
     }
+  });
+}
+
+function saveVisibleQuantities() {
+
+  products.forEach((item, index) => {
+
+    const input =
+      document.getElementById(
+        `qty-${index}`
+      );
+
+    if (!input) {
+      return;
+    }
+
+    quantityState[index] =
+      input.value;
+  });
+}
 
     function getOrderItems() {
-      const orderItems = [];
 
-      products.forEach((item, index) => {
-        const input = document.getElementById(`qty-${index}`);
-        if (!input) return;
+  saveVisibleQuantities();
 
-        const qty = input.value;
+  const orderItems = [];
 
-        if (qty && Number(qty) > 0) {
-          orderItems.push({
-            productName: item.name,
-            quantity: qty,
-            unit: item.unit
-          });
-        }
+  products.forEach((item, index) => {
+
+    const qty =
+      quantityState[index];
+
+    if (
+      qty !== undefined &&
+      qty !== "" &&
+      Number(qty) > 0
+    ) {
+
+      orderItems.push({
+        productName: item.name,
+        quantity: qty,
+        unit: item.unit
       });
-
-      return orderItems;
     }
+  });
+
+  return orderItems;
+}
+
+function collectDraftData() {
+
+  saveVisibleQuantities();
+
+  const draftItems =
+    products.map((item, index) => ({
+      productName: item.name,
+      quantity:
+        quantityState[index] || "",
+      unit: item.unit
+    }));
+
+  const previewText =
+    document
+      .getElementById("preview")
+      .innerText
+      .trim();
+
+  return {
+    action: "saveDraft",
+    vendor: "서울명성",
+    title: "서울명성 발주",
+    storeName: STORE_NAME,
+
+    orderDate:
+      document
+        .getElementById("orderDate")
+        .value,
+
+    memo:
+      document
+        .getElementById("memo")
+        .value
+        .trim(),
+
+    draftItems,
+
+    orderText:
+      previewText ===
+      "발주문 생성 버튼을 누르면 여기에 발주 내용이 표시됩니다."
+        ? ""
+        : previewText
+  };
+}
+
+let draftSaveTimer = null;
+let draftSaving = false;
+
+
+async function saveDraft(
+  isAutoSave = false
+) {
+
+  if (draftSaving) {
+    return;
+  }
+
+  const data =
+    collectDraftData();
+
+  if (!data.orderDate) {
+
+    if (!isAutoSave) {
+      alert("발주일을 선택해 주세요.");
+    }
+
+    return;
+  }
+
+  draftSaving = true;
+
+  setDraftStatus(
+    isAutoSave
+      ? "자동 임시저장 중..."
+      : "임시저장 중..."
+  );
+
+  try {
+
+    const response =
+      await fetch(
+        SCRIPT_URL,
+        {
+          method: "POST",
+
+          body:
+            JSON.stringify(data)
+        }
+      );
+
+    const result =
+      await response.json();
+
+    if (!result.success) {
+
+      throw new Error(
+        result.message ||
+        "임시저장 실패"
+      );
+    }
+
+    setDraftStatus(
+      `임시저장됨 · ${
+        result.savedAt || ""
+      }`
+    );
+
+    if (!isAutoSave) {
+
+      alert(
+        "현재 발주 내용이 임시저장되었습니다."
+      );
+    }
+
+  } catch (err) {
+
+    setDraftStatus(
+      "임시저장 실패 · 다시 시도해 주세요."
+    );
+
+    if (!isAutoSave) {
+
+      alert(
+        "임시저장 중 오류가 발생했습니다.\n" +
+        err.message
+      );
+    }
+
+  } finally {
+
+    draftSaving = false;
+  }
+}
+
+
+function scheduleDraftSave() {
+
+  clearTimeout(
+    draftSaveTimer
+  );
+
+  draftSaveTimer =
+    setTimeout(
+      function() {
+
+        saveDraft(true);
+
+      },
+      3000
+    );
+
+  setDraftStatus(
+    "변경사항 있음 · 잠시 후 자동 저장"
+  );
+}
+
+
+function setDraftStatus(message) {
+
+  const status =
+    document.getElementById(
+      "draftStatus"
+    );
+
+  if (status) {
+    status.innerText = message;
+  }
+}
+
+async function loadDraft() {
+
+  const query =
+    new URLSearchParams({
+
+      action: "loadDraft",
+
+      storeName: STORE_NAME,
+
+      vendor: "서울명성",
+
+      t: Date.now()
+
+    });
+
+  setDraftStatus(
+    "임시저장 내역 확인 중..."
+  );
+
+  try {
+
+    const response =
+      await fetch(
+        `${SCRIPT_URL}?${query.toString()}`
+      );
+
+    const result =
+      await response.json();
+
+    if (
+      !result.success ||
+      !result.exists ||
+      !result.draft
+    ) {
+
+      setDraftStatus(
+        "저장된 임시 발주가 없습니다."
+      );
+
+      return;
+    }
+
+    const draft =
+      result.draft;
+
+    const ok =
+      confirm(
+        `작성 중인 서울명성 발주가 있습니다.
+
+최종 저장시간
+${draft.savedAt}
+
+이어서 작성하시겠습니까?`
+      );
+
+    if (!ok) {
+
+      setDraftStatus(
+        `임시저장 있음 · ${draft.savedAt}`
+      );
+
+      return;
+    }
+
+    applyDraftData(draft);
+
+    setDraftStatus(
+      `임시저장 불러옴 · ${draft.savedAt}`
+    );
+
+  } catch (err) {
+
+    console.error(err);
+
+    setDraftStatus(
+      "임시저장 확인 실패"
+    );
+  }
+
+}
+
+function applyDraftData(draft) {
+
+  document.getElementById(
+    "orderDate"
+  ).value =
+    draft.orderDate || "";
+
+  document.getElementById(
+    "memo"
+  ).value =
+    draft.memo || "";
+
+  quantityState = {};
+
+  (draft.draftItems || [])
+    .forEach(item => {
+
+      const index =
+        products.findIndex(
+          p =>
+            p.name === item.productName
+        );
+
+      if (index >= 0) {
+
+        quantityState[index] =
+          item.quantity || "";
+      }
+
+    });
+
+  renderProducts(false);
+
+  document
+    .getElementById("preview")
+    .innerText =
+      draft.orderText ||
+      "발주문 생성 버튼을 누르면 여기에 발주 내용이 표시됩니다.";
+
+}
 
     function createOrderText() {
       const orderDate = document.getElementById("orderDate").value;
@@ -394,66 +810,275 @@
         .catch(() => alert("복사가 안 될 경우, 미리보기 내용을 직접 복사해 주세요."));
     }
 
-    function resetOrder() {
-      products.forEach((item, index) => {
-        const input = document.getElementById(`qty-${index}`);
-        if (input) input.value = "";
-      });
+    async function resetOrder() {
 
-      document.getElementById("memo").value = "";
-      document.getElementById("searchInput").value = "";
-      document.getElementById("preview").innerText =
+  const ok =
+    confirm(
+      "현재 입력 내용과 서버 임시저장을 모두 삭제하시겠습니까?"
+    );
+
+  if (!ok) {
+    return;
+  }
+
+  clearTimeout(
+    draftSaveTimer
+  );
+
+  try {
+
+    const response =
+      await fetch(
+        SCRIPT_URL,
+        {
+          method: "POST",
+
+          body: JSON.stringify({
+            action: "deleteDraft",
+            storeName: STORE_NAME,
+            vendor: "서울명성"
+          })
+        }
+      );
+
+    const result =
+      await response.json();
+
+    if (!result.success) {
+
+      throw new Error(
+        result.message ||
+        "임시저장 삭제에 실패했습니다."
+      );
+    }
+
+    /*
+     * 저장된 수량 상태 초기화
+     */
+    quantityState = {};
+
+    /*
+     * 현재 화면에 보이는 수량칸 초기화
+     */
+    products.forEach(
+      (item, index) => {
+
+        const input =
+          document.getElementById(
+            `qty-${index}`
+          );
+
+        if (input) {
+          input.value = "";
+        }
+      }
+    );
+
+    document
+      .getElementById("memo")
+      .value = "";
+
+    document
+      .getElementById("searchInput")
+      .value = "";
+
+    document
+      .getElementById("preview")
+      .innerText =
         "발주문 생성 버튼을 누르면 여기에 발주 내용이 표시됩니다.";
 
-      setTodayDate();
-      renderProducts();
+    setTodayDate();
 
-      alert("발주문이 초기화되었습니다.");
+    renderProducts();
+
+    setDraftStatus(
+      "입력 내용과 임시저장이 삭제되었습니다."
+    );
+
+    alert(
+      "발주문이 초기화되었습니다."
+    );
+
+  } catch (err) {
+
+    alert(
+      "초기화 중 오류가 발생했습니다.\n" +
+      err.message
+    );
+  }
+}
+
+    async function submitOrder() {
+
+  const orderDate =
+    document
+      .getElementById("orderDate")
+      .value;
+
+  const memo =
+    document
+      .getElementById("memo")
+      .value
+      .trim();
+
+  const orderItems =
+    getOrderItems();
+
+  if (!orderDate) {
+
+    alert(
+      "발주일을 선택해 주세요."
+    );
+
+    return;
+  }
+
+  if (orderItems.length === 0) {
+
+    alert(
+      "발주 수량을 하나 이상 입력해 주세요."
+    );
+
+    return;
+  }
+
+  const orderText =
+    createOrderText();
+
+  const orderData = {
+    vendor: "서울명성",
+    title: "서울명성 발주",
+    storeName: STORE_NAME,
+    orderDate,
+    memo,
+    orderText,
+    smsRequested: true,
+    items: orderItems
+  };
+
+  const confirmed =
+    confirm(
+      "현재 발주 내용을 최종 저장하시겠습니까?"
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  clearTimeout(
+    draftSaveTimer
+  );
+
+  setDraftStatus(
+    "최종 발주 저장 중..."
+  );
+
+  try {
+
+    const response =
+      await fetch(
+        SCRIPT_URL,
+        {
+          method: "POST",
+
+          /*
+           * Apps Script 웹앱에서 CORS 오류를 줄이기 위해
+           * Content-Type 헤더는 넣지 않습니다.
+           */
+          body:
+            JSON.stringify(orderData)
+        }
+      );
+
+    const result =
+      await response.json();
+
+    if (!result.success) {
+
+      throw new Error(
+        result.message ||
+        "최종 저장에 실패했습니다."
+      );
     }
 
-    function submitOrder() {
-      const orderDate = document.getElementById("orderDate").value;
-      const memo = document.getElementById("memo").value.trim();
-      const orderItems = getOrderItems();
+    setDraftStatus(
+      "최종 발주 완료 · 임시저장 삭제됨"
+    );
 
-      if (!orderDate) {
-        alert("발주일을 선택해 주세요.");
-        return;
+    alert(
+      "최종 발주가 시트에 저장되었습니다."
+    );
+
+    /*
+     * 최종 저장 후 화면만 초기화합니다.
+     * resetOrder()를 호출하면 서버에 임시저장 삭제 요청을
+     * 한 번 더 보내므로 여기서는 직접 초기화합니다.
+     */
+    quantityState = {};
+
+    products.forEach(
+      (item, index) => {
+
+        const input =
+          document.getElementById(
+            `qty-${index}`
+          );
+
+        if (input) {
+          input.value = "";
+        }
       }
+    );
 
-      if (orderItems.length === 0) {
-        alert("발주 수량을 하나 이상 입력해 주세요.");
-        return;
-      }
+    document
+      .getElementById("memo")
+      .value = "";
 
-      const orderText = createOrderText();
+    document
+      .getElementById("searchInput")
+      .value = "";
 
-      const orderData = {
-        vendor: "서울명성",
-        title: "서울명성 발주",
-        storeName: STORE_NAME,
-        orderDate,
-        memo,
-        orderText,
-        smsRequested: true,
-        items: orderItems
-      };
-
-      fetch(SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(orderData)
-      });
-
-      alert("시트 저장 및 문자전송 요청이 완료되었습니다.");
-      resetOrder();
-    }
+    document
+      .getElementById("preview")
+      .innerText =
+        "발주문 생성 버튼을 누르면 여기에 발주 내용이 표시됩니다.";
 
     setTodayDate();
+
     renderProducts();
+
+  } catch (err) {
+
+    console.error(err);
+
+    setDraftStatus(
+      "최종 저장 실패 · 임시저장은 유지됩니다."
+    );
+
+    alert(
+      "최종 저장 중 오류가 발생했습니다.\n" +
+      err.message
+    );
+  }
+}
+
+    document
+  .getElementById("orderDate")
+  .addEventListener(
+    "change",
+    scheduleDraftSave
+  );
+
+document
+  .getElementById("memo")
+  .addEventListener(
+    "input",
+    scheduleDraftSave
+  );
+
+setTodayDate();
+renderProducts();
+loadDraft();
   </script>
 </body>
 </html>
