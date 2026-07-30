@@ -650,15 +650,10 @@ async function loadDraft() {
 
   const query =
     new URLSearchParams({
-
       action: "loadDraft",
-
       storeName: STORE_NAME,
-
       vendor: "서울명성",
-
       t: Date.now()
-
     });
 
   setDraftStatus(
@@ -691,29 +686,67 @@ async function loadDraft() {
     const draft =
       result.draft;
 
+    const savedAtText =
+      draft.savedAt ||
+      "저장시간 정보 없음";
+
+    const orderDateText =
+      draft.orderDate ||
+      "날짜 정보 없음";
+
     const ok =
       confirm(
-        `작성 중인 서울명성 발주가 있습니다.
+`작성 중인 서울명성 발주가 있습니다.
 
-최종 저장시간
-${draft.savedAt}
+거래처 : 서울명성
+발주일 : ${orderDateText}
+마지막 저장 : ${savedAtText}
 
-이어서 작성하시겠습니까?`
+이어서 작성하시겠습니까?
+
+확인 : 불러오기
+취소 : 새로 시작`
       );
 
-    if (!ok) {
+    /*
+     * 확인 → 기존 임시저장 불러오기
+     */
+    if (ok) {
+
+      applyDraftData(
+        draft
+      );
 
       setDraftStatus(
-        `임시저장 있음 · ${draft.savedAt}`
+        `임시저장 불러옴 · ${savedAtText}`
       );
 
       return;
     }
 
-    applyDraftData(draft);
+    /*
+     * 취소 → 서버 임시저장 삭제 후 새로 시작
+     */
+    const deleted =
+      await deleteServerDraft();
+
+    if (!deleted) {
+
+      setDraftStatus(
+        "임시저장을 삭제하지 못했습니다."
+      );
+
+      alert(
+        "새로 시작하는 중 임시저장을 삭제하지 못했습니다."
+      );
+
+      return;
+    }
+
+    clearOrderScreen();
 
     setDraftStatus(
-      `임시저장 불러옴 · ${draft.savedAt}`
+      "기존 임시저장을 삭제하고 새 발주를 시작했습니다."
     );
 
   } catch (err) {
@@ -724,7 +757,95 @@ ${draft.savedAt}
       "임시저장 확인 실패"
     );
   }
+}
 
+async function deleteServerDraft() {
+
+  try {
+
+    const response =
+      await fetch(
+        SCRIPT_URL,
+        {
+          method: "POST",
+
+          body:
+            JSON.stringify({
+              action: "deleteDraft",
+              storeName: STORE_NAME,
+              vendor: "서울명성"
+            })
+        }
+      );
+
+    const result =
+      await response.json();
+
+    return Boolean(
+      result &&
+      result.success
+    );
+
+  } catch (err) {
+
+    console.error(
+      "임시저장 삭제 오류:",
+      err
+    );
+
+    return false;
+  }
+}
+
+
+function clearOrderScreen() {
+
+  clearTimeout(
+    draftSaveTimer
+  );
+
+  quantityState = {};
+
+  products.forEach(
+    (item, index) => {
+
+      const input =
+        document.getElementById(
+          `qty-${index}`
+        );
+
+      if (input) {
+        input.value = "";
+      }
+    }
+  );
+
+  document
+    .getElementById(
+      "memo"
+    )
+    .value = "";
+
+  document
+    .getElementById(
+      "searchInput"
+    )
+    .value = "";
+
+  document
+    .getElementById(
+      "preview"
+    )
+    .innerText =
+      "발주문 생성 버튼을 누르면 여기에 발주 내용이 표시됩니다.";
+
+  setTodayDate();
+
+  /*
+   * false로 호출해야 초기화된 quantityState를
+   * 다시 이전 화면값으로 저장하지 않습니다.
+   */
+  renderProducts(false);
 }
 
 function applyDraftData(draft) {
